@@ -18,9 +18,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/big"
 	"net"
 	"os"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -580,6 +582,43 @@ func (d *Daemon) notifyOnDNSMsg(lookupTime time.Time, ep *endpoint.Endpoint, epI
 	record.Log()
 
 	if msg.Response && msg.Rcode == dns.RcodeSuccess && len(responseIPs) > 0 {
+		// Create a critical section especially for when multiple DNS requests
+		// are in-flight for the same name (i.e. cilium.io).
+		//
+		// It is possible for the following race to occurr:
+		//
+		//              G1                                    G2
+		//
+		// T0 --> NotifyOnDNSMsg()               NotifyOnDNSMsg()            <-- T0
+		//
+		// T1 --> UpdateGenerateDNS()            UpdateGenerateDNS()         <-- T1
+		//
+		// T2 ----> mutex.Lock()                 +---------------------------+
+		//                                       |No identities need updating|
+		// T3 ----> mutex.Unlock()               +---------------------------+
+		//
+		// T4 --> UpsertGeneratedIdentities()    UpsertGeneratedIdentities() <-- T4
+		//
+		// T5 ---->  Upsert()                    DNS released back to pod    <-- T5
+		//                                                    |
+		// T6 --> DNS released back to pod                    |
+		//              |                                     |
+		//              |                                     |
+		//              v                                     v
+		//       Traffic flows fine                   Leads to policy drop
+		//
+		// Note how G2 releases the DNS msg back to the pod at T5 because
+		// UpdateGenerateDNS() was a no-op. It's a no-op because G1 had executed
+		// UpdateGenerateDNS() first at T1 and performed the necessary identity
+		// allocation for the response IPs. Due to G1 performing all the work
+		// first, G2 executes T4 also as a no-op and releases the msg back to the
+		// pod at T5 before G1 would at T6.
+		mutexes := d.getMutexesForResponseIPs(responseIPs)
+		for _, m := range mutexes {
+			d.dnsProxyContext.responseMutexes[m].Lock()
+			defer d.dnsProxyContext.responseMutexes[m].Unlock()
+		}
+
 		stat.DataplaneTime.Start()
 		// This must happen before the NameManager update below, to ensure that
 		// this data is included in the serialized Endpoint object.
@@ -639,6 +678,39 @@ func (d *Daemon) notifyOnDNSMsg(lookupTime time.Time, ep *endpoint.Endpoint, epI
 
 	stat.ProcessingTime.End(true)
 	return nil
+}
+
+// getMutexesForResponseIPs returns a slice of indices for accessing the
+// mutexes in dnsProxyContext. There's a many-to-one mapping from IP to mutex,
+// meaning multiple IPs may map to a single mutex. The many-to-one property is
+// obtained by hashing each IP inside responseIPs. In order to prevent the
+// caller from acquiring the mutexes in an undesirable order, this function
+// ensures that the slice returned in ascending order. This is the order in
+// which the mutexes should be taken and released. The slice is de-duplicated
+// to avoid acquiring and releasing the same mutex in order.
+func (d *Daemon) getMutexesForResponseIPs(responseIPs []net.IP) []int {
+	// cache stores all unique indices for mutexes. Prevents the same mutex
+	// index from being added to indices which prevents the caller from
+	// attempting to acquire the same mutex multiple times.
+	cache := make(map[int]struct{}, len(responseIPs))
+	indices := make([]int, 0, len(responseIPs))
+	for _, ip := range responseIPs {
+		h := ipToInt(ip)
+		m := h.Mod(h, d.dnsProxyContext.modulus)
+		i := int(m.Int64())
+		if _, exists := cache[i]; !exists {
+			cache[i] = struct{}{}
+			indices = append(indices, i)
+		}
+	}
+	sort.Ints(indices)
+	return indices
+}
+
+func ipToInt(addr net.IP) *big.Int {
+	i := big.NewInt(0)
+	i.SetBytes(addr)
+	return i
 }
 
 type getFqdnCache struct {

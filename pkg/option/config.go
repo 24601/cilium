@@ -468,6 +468,10 @@ const (
 	// been reached.
 	DNSProxyConcurrencyProcessingGracePeriod = "dnsproxy-concurrency-processing-grace-period"
 
+	// DNSProxyLockSize is the array size containing mutexes which protect
+	// against parallel handling of DNS reponse IPs.
+	DNSProxyLockSize = "dnsproxy-lock-size"
+
 	// MTUName is the name of the MTU option
 	MTUName = "mtu"
 
@@ -1584,6 +1588,10 @@ type DaemonConfig struct {
 	// been reached.
 	DNSProxyConcurrencyProcessingGracePeriod time.Duration
 
+	// DNSProxyLockSize is the array size containing mutexes which protect
+	// against parallel handling of DNS reponse IPs.
+	DNSProxyLockSize int
+
 	// HostDevice will be device used by Cilium to connect to the outside world.
 	HostDevice string
 
@@ -2688,6 +2696,7 @@ func (c *DaemonConfig) Populate() {
 	c.ToFQDNsEnableDNSCompression = viper.GetBool(ToFQDNsEnableDNSCompression)
 	c.DNSProxyConcurrencyLimit = viper.GetInt(DNSProxyConcurrencyLimit)
 	c.DNSProxyConcurrencyProcessingGracePeriod = viper.GetDuration(DNSProxyConcurrencyProcessingGracePeriod)
+	c.DNSProxyLockSize = viper.GetInt(DNSProxyLockSize)
 
 	// Convert IP strings into net.IPNet types
 	subnets, invalid := ip.ParseCIDRs(viper.GetStringSlice(IPv4PodSubnets))
