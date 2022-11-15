@@ -52,6 +52,7 @@ jobs:
         with:
           ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
+
       - name: Set Environment Variables
         uses: ./.github/actions/set-env-variables
 
@@ -105,6 +106,32 @@ jobs:
         run: |
           cosign sign docker.io/${{ github.repository_owner }}/${{ matrix.name }}@${{ steps.docker_build_release.outputs.digest }}
           cosign sign quay.io/${{ env.QUAY_ORGANIZATION }}/${{ matrix.name }}@${{ steps.docker_build_release.outputs.digest }}
+
+      - name: Install Bom
+        shell: bash
+        run: |
+          curl -L https://github.com/kubernetes-sigs/bom/releases/download/v0.4.1/bom-linux-amd64 -o bom
+          sudo mv ./bom /usr/local/bin/bom
+          sudo chmod +x /usr/local/bin/bom
+
+      - name: Generate SBOM
+        shell: bash
+        run: |
+          bom generate -o sbom_${{ matrix.name }}_${{ steps.tag.outputs.tag }}.spdx \
+          --dirs=. \
+          --image=quay.io/${{ env.QUAY_ORGANIZATION }}/${{ matrix.name }}:${{ steps.tag.outputs.tag }}
+
+      - name: Attach SBOM to container images
+        run: |
+          cosign attach sbom --sbom sbom_${{ matrix.name }}_${{ steps.tag.outputs.tag }}.spdx docker.io/${{ github.repository_owner }}/${{ matrix.name }}@${{ steps.docker_build_release.outputs.digest }}
+          cosign attach sbom --sbom sbom_${{ matrix.name }}_${{ steps.tag.outputs.tag }}.spdx quay.io/${{ env.QUAY_ORGANIZATION }}/${{ matrix.name }}@${{ steps.docker_build_release.outputs.digest }}
+
+      - name: Sign Container Image
+        env:
+          COSIGN_EXPERIMENTAL: "true"
+        run: |
+          cosign sign docker.io/${{ github.repository_owner }}/${{ matrix.name }}:${{ steps.docker_build_release.outputs.digest }}.sbom
+          cosign sign quay.io/${{ env.QUAY_ORGANIZATION }}/${{ matrix.name }}:${{ steps.docker_build_release.outputs.digest }}.sbom
 
       - name: Image Release Digest
         shell: bash

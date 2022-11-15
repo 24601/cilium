@@ -99,6 +99,33 @@ jobs:
         run: |
           cosign sign quay.io/${{ env.QUAY_ORGANIZATION_DEV }}/cilium-runtime@${{ steps.docker_build_release_runtime.outputs.digest }}
 
+      - name: Install Bom
+        shell: bash
+        run: |
+          curl -L https://github.com/kubernetes-sigs/bom/releases/download/v0.4.1/bom-linux-amd64 -o bom
+          sudo mv ./bom /usr/local/bin/bom
+          sudo chmod +x /usr/local/bin/bom
+
+      - name: Generate SBOM
+        if: ${{ steps.cilium-runtime-tag-in-repositories.outputs.exists == 'false' }}
+        shell: bash
+        run: |
+          bom generate -o sbom_cilium-runtime_${{ steps.runtime-tag.outputs.tag }}.spdx \
+          --dirs=. \
+          --image=quay.io/${{ env.QUAY_ORGANIZATION_DEV }}/cilium-runtime:${{ steps.runtime-tag.outputs.tag }}
+
+      - name: Attach SBOM to container images
+        if: ${{ steps.cilium-runtime-tag-in-repositories.outputs.exists == 'false' }}
+        run: |
+          cosign attach sbom --sbom sbom_cilium-runtime_${{ steps.runtime-tag.outputs.tag }}.spdx quay.io/${{ env.QUAY_ORGANIZATION_DEV }}/cilium-runtime@${{ steps.docker_build_release_runtime.outputs.digest }}
+
+      - name: Sign Container Image Runtime SBOM
+        if: ${{ steps.cilium-runtime-tag-in-repositories.outputs.exists == 'false' }}
+        env:
+          COSIGN_EXPERIMENTAL: "true"
+        run: |
+          cosign sign quay.io/${{ env.QUAY_ORGANIZATION_DEV }}/cilium-runtime:${{ steps.docker_build_release_runtime.outputs.digest }}.sbom
+
       - name: Image Release Digest Runtime
         if: ${{ steps.cilium-runtime-tag-in-repositories.outputs.exists == 'false' }}
         shell: bash
@@ -164,6 +191,26 @@ jobs:
           COSIGN_EXPERIMENTAL: "true"
         run: |
           cosign sign quay.io/${{ env.QUAY_ORGANIZATION_DEV }}/cilium-builder@${{ steps.docker_build_release_builder.outputs.digest }}
+
+      - name: Generate SBOM
+        if: ${{ steps.cilium-builder-tag-in-repositories.outputs.exists == 'false' }}
+        shell: bash
+        run: |
+          bom generate -o sbom_cilium-builder_${{ steps.builder-tag.outputs.tag }}.spdx \
+          --dirs=. \
+          --image=quay.io/${{ env.QUAY_ORGANIZATION_DEV }}/cilium-builder:${{ steps.builder-tag.outputs.tag }}
+
+      - name: Attach SBOM to container images
+        if: ${{ steps.cilium-runtime-tag-in-repositories.outputs.exists == 'false' }}
+        run: |
+          cosign attach sbom --sbom sbom_cilium-builder_${{ steps.builder-tag.outputs.tag }}.spdx quay.io/${{ env.QUAY_ORGANIZATION_DEV }}/cilium-builder@${{ steps.docker_build_release_builder.outputs.digest }}
+
+      - name: Sign Container Image Builder SBOM
+        if: ${{ steps.cilium-builder-tag-in-repositories.outputs.exists == 'false' }}
+        env:
+          COSIGN_EXPERIMENTAL: "true"
+        run: |
+          cosign sign quay.io/${{ env.QUAY_ORGANIZATION_DEV }}/cilium-builder:${{ steps.docker_build_release_builder.outputs.digest }}.sbom
 
       - name: Image Release Digest Builder
         if: ${{ steps.cilium-builder-tag-in-repositories.outputs.exists == 'false' }}
