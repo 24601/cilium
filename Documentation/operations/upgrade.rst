@@ -349,6 +349,13 @@ Added Metrics
 * ``cilium_operator_ipam_interface_candidates``
 * ``cilium_operator_ipam_empty_interface_slots``
 
+Modified Metrics
+~~~~~~~~~~~~~~~~
+
+* Values for the ``reason`` label have been updated in  ``hubble_drop_total`` metric.
+  Please see `the API documentation <https://github.com/cilium/cilium/tree/master/api/v1/flow#flow-DropReason>`_
+  for the complete list of drop reasons.
+
 Deprecated Metrics
 ~~~~~~~~~~~~~~~~~~
 
