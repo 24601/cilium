@@ -20,7 +20,7 @@ on:
   #   will disappear from the PR checks: please provide a direct link to the
   #   successful workflow run (can be found from Actions tab) in a comment.
   #
-  # pull_request: {}
+  pull_request: {}
   ###
 
 # By specifying the access of one of the scopes, all of those that are not
@@ -156,7 +156,7 @@ jobs:
       - name: Install cilium-cli
         shell: bash
         run: |
-          cid=$(docker create quay.io/cilium/cilium-cli-ci:latest ls)
+          cid=$(docker create quay.io/cilium/cilium-cli-ci:967e017ad5527743d8d7b429589804f69abd4f9f ls)
           docker cp $cid:/usr/local/bin/cilium ./cilium-cli
           docker rm $cid
 
@@ -168,21 +168,24 @@ jobs:
             until docker manifest inspect quay.io/${{ github.repository_owner }}/$image:${{ steps.vars.outputs.sha }} &> /dev/null; do sleep 45s; done
           done
 
-      - name: Derive kube-proxy requirements
+      - name: Derive Cilium feature requirements
         shell: bash
         run: |
             if [[ ${{ matrix.kernel }} == "4.19-"* ]]; then
               # Only kube-proxy
               echo 'KUBE_PROXY=iptables' >> $GITHUB_ENV
               echo 'KPR=disabled' >> $GITHUB_ENV
+              echo 'ENCRYPTION=ipsec' >> $GITHUB_ENV
             elif [[ ${{ matrix.kernel }} == "5.4-"* ]]; then
               # Mixed mode
               echo 'KUBE_PROXY=iptables' >> $GITHUB_ENV
               echo 'KPR=strict' >> $GITHUB_ENV
+              echo 'ENCRYPTION=disabled' >> $GITHUB_ENV
             else
               # Only kube-proxy-replacement
               echo 'KUBE_PROXY=none' >> $GITHUB_ENV
               echo 'KPR=strict' >> $GITHUB_ENV
+              echo 'ENCRYPTION=wireguard' >> $GITHUB_ENV
             fi
 
       - name: Run tests
@@ -197,9 +200,7 @@ jobs:
             set -eux
 
             echo 'nameserver 1.1.1.1' > /etc/resolv.conf
-
             cd /host/
-
 
             ./contrib/scripts/kind.sh "" 3 "" "" "${{ env.KUBE_PROXY }}"
             ./cilium-cli install --wait \
@@ -220,6 +221,32 @@ jobs:
             ./cilium-cli status --wait
             ./cilium-cli connectivity test --datapath
             ./cilium-cli connectivity test -t -d
+            kind delete cluster
+
+            [[ "${{ env.ENCRYPTION }}" == "disabled" ]] && exit 0
+
+            ./contrib/scripts/kind.sh "" 3 "" "" "${{ env.KUBE_PROXY }}"
+            ./cilium-cli install --wait \
+            --chart-directory=./install/kubernetes/cilium \
+            --helm-set=image.repository=quay.io/${{ github.repository_owner }}/cilium-ci \
+            --helm-set=image.useDigest=false \
+            --helm-set=image.tag=${{ steps.vars.outputs.sha }} \
+            --helm-set=operator.image.repository=quay.io/${{ github.repository_owner }}/operator \
+            --helm-set=operator.image.suffix=-ci \
+            --helm-set=operator.image.tag=${{ steps.vars.outputs.sha }} \
+            --helm-set=operator.image.useDigest=false \
+            --helm-set=hubble.relay.image.repository=quay.io/${{ github.repository_owner }}/hubble-relay-ci \
+            --helm-set=hubble.relay.image.tag=${{ steps.vars.outputs.sha }} \
+            --rollback=false \
+            --config monitor-aggregation=none \
+            --nodes-without-cilium=kind-worker3 --helm-set-string="kubeProxyReplacement=${{ env.KPR }}" \
+            --encryption=${{ env.ENCRYPTION }}
+
+            ./cilium-cli status --wait
+            ./cilium-cli connectivity test --datapath
+            ./cilium-cli connectivity test -t -d
+
+            kind delete cluster
 
       - name: Fetch artifacts
         if: ${{ !success() }}
