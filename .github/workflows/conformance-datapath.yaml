@@ -190,7 +190,7 @@ jobs:
         with:
           test-name: datapath-conformance
           image: kind
-          lvh-version: 'v0.0.1'
+          lvh-version: 'v0.0.2'
           image-version: ${{ matrix.kernel }}
           host-mount: ./
           cpu: 4
