@@ -186,7 +186,7 @@ jobs:
             fi
 
       - name: Run tests
-        uses: cilium/little-vm-helper@76cb7b131c9fa60f697af29106b529c0a423a17e
+        uses: cilium/little-vm-helper@8554937165d6074f1ac697fb3b6899d0a05cd69c
         with:
           test-name: datapath-conformance
           image: kind
@@ -224,7 +224,7 @@ jobs:
 
       - name: Fetch artifacts
         if: ${{ !success() }}
-        uses: cilium/little-vm-helper@76cb7b131c9fa60f697af29106b529c0a423a17e
+        uses: cilium/little-vm-helper@8554937165d6074f1ac697fb3b6899d0a05cd69c
         with:
           provision: 'false'
           cmd: |
