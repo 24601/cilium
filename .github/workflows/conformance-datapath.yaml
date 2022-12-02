@@ -186,7 +186,7 @@ jobs:
             fi
 
       - name: Run tests
-        uses: cilium/little-vm-helper@8554937165d6074f1ac697fb3b6899d0a05cd69c
+        uses: cilium/little-vm-helper@936233d7af18057fcc593d0a0a0adaf586c1b525
         with:
           test-name: datapath-conformance
           image: kind
@@ -198,6 +198,8 @@ jobs:
             set -eux
 
             echo 'nameserver 1.1.1.1' > /etc/resolv.conf
+
+            git config --global --add safe.directory /host
 
             cd /host/
 
@@ -224,7 +226,7 @@ jobs:
 
       - name: Fetch artifacts
         if: ${{ !success() }}
-        uses: cilium/little-vm-helper@8554937165d6074f1ac697fb3b6899d0a05cd69c
+        uses: cilium/little-vm-helper@936233d7af18057fcc593d0a0a0adaf586c1b525
         with:
           provision: 'false'
           cmd: |
