@@ -327,9 +327,12 @@ jobs:
         env:
           COSIGN_EXPERIMENTAL: "true"
         run: |
-          cosign sign quay.io/${{ env.QUAY_ORGANIZATION_DEV }}/${{ matrix.name }}-ci:${{ steps.docker_build_ci_pr.outputs.digest }}.sbom
-          cosign sign quay.io/${{ env.QUAY_ORGANIZATION_DEV }}/${{ matrix.name }}-ci:${{ steps.docker_build_ci_pr_detect_race_condition.outputs.digest }}.sbom
-          cosign sign quay.io/${{ env.QUAY_ORGANIZATION_DEV }}/${{ matrix.name }}-ci:${{ steps.docker_build_ci_pr_unstripped.outputs.digest }}.sbom
+          docker_build_ci_pr_digest=$(docker buildx imagetools inspect quay.io/${{ env.QUAY_ORGANIZATION_DEV }}/${{ matrix.name }}-ci:${${{ steps.docker_build_ci_pr.outputs.digest }}/:/-}.sbom | jq .config.digest)
+          cosign sign quay.io/${{ env.QUAY_ORGANIZATION_DEV }}/${{ matrix.name }}-ci:${docker_build_ci_pr_digest}
+          docker_build_ci_pr_detect_race_condition=$(docker buildx imagetools inspect quay.io/${{ env.QUAY_ORGANIZATION_DEV }}/${{ matrix.name }}-ci:${${{ steps.docker_build_ci_pr_detect_race_condition.outputs.digest }}/:/-}.sbom | jq .config.digest)
+          cosign sign quay.io/${{ env.QUAY_ORGANIZATION_DEV }}/${{ matrix.name }}-ci:${docker_build_ci_pr_detect_race_condition}
+          docker_build_ci_pr_unstripped=$(docker buildx imagetools inspect quay.io/${{ env.QUAY_ORGANIZATION_DEV }}/${{ matrix.name }}-ci:${${{ steps.docker_build_ci_pr_unstripped.outputs.digest }}/:/-}.sbom | jq .config.digest)
+          cosign sign quay.io/${{ env.QUAY_ORGANIZATION_DEV }}/${{ matrix.name }}-ci:${docker_build_ci_pr_unstripped}
 
       - name: CI Image Releases digests
         if: ${{ github.event_name == 'pull_request' }}
