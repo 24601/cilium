@@ -19,18 +19,10 @@ import (
 // Example: 192.0.2.1/32
 type CIDR string
 
-// CIDRMatchAll is a []CIDR that matches everything
-var CIDRMatchAll = []CIDR{CIDR("0.0.0.0/0"), CIDR("::/0")}
-
-// MatchesAll determines whether the CIDR matches all traffic.
-func (c CIDR) MatchesAll() bool {
-	for _, wildcard := range CIDRMatchAll {
-		if c == wildcard {
-			return true
-		}
-	}
-	return false
-}
+var (
+	ipv4All = CIDR("0.0.0.0/0")
+	ipv6All = CIDR("::/0")
+)
 
 // CIDRRule is a rule that specifies a CIDR prefix to/from which outside
 // communication  is allowed, along with an optional list of subnets within that
@@ -75,18 +67,23 @@ func (s CIDRSlice) GetAsEndpointSelectors() EndpointSelectorSlice {
 	// If multiple CIDRs representing reserved:world are in this CIDRSlice,
 	// we only have to add the EndpointSelector representing reserved:world
 	// once.
-	var hasWorldBeenAdded bool
+	var hasIPv4AllBeenAdded, hasIPv6AllBeenAdded bool
 	slice := EndpointSelectorSlice{}
 	for _, cidr := range s {
-		if cidr.MatchesAll() && !hasWorldBeenAdded {
-			hasWorldBeenAdded = true
-			slice = append(slice, ReservedEndpointSelectors[labels.IDNameWorld])
+		if cidr == ipv4All {
+			hasIPv4AllBeenAdded = true
+		}
+		if cidr == ipv6All {
+			hasIPv6AllBeenAdded = true
 		}
 		lbl, err := cidrpkg.IPStringToLabel(string(cidr))
 		if err == nil {
 			slice = append(slice, NewESFromLabels(lbl))
 		}
 		// TODO: Log the error?
+	}
+	if hasIPv4AllBeenAdded && hasIPv6AllBeenAdded {
+		slice = append(slice, ReservedEndpointSelectors[labels.IDNameWorld])
 	}
 
 	return slice
