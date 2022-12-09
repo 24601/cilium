@@ -55,11 +55,11 @@ nsenter -t $CONTROL_PLANE_PID -n /bin/sh -c "\
     ip l s dev l4lb-veth1 up"
 
 # Wait until Docker is ready in the lb-node node
-while ! docker exec -ti lb-node docker ps >/dev/null; do sleep 1; done
+while ! docker exec -t lb-node docker ps >/dev/null; do sleep 1; done
 
 # Install Cilium as standalone L4LB
-docker exec -ti lb-node mount bpffs /sys/fs/bpf -t bpf
-docker exec -ti lb-node \
+docker exec -t lb-node mount bpffs /sys/fs/bpf -t bpf
+docker exec -t lb-node \
   docker run --name cilium-lb -td \
     -v /sys/fs/bpf:/sys/fs/bpf \
     -v /lib/modules:/lib/modules \
@@ -97,7 +97,7 @@ nsenter -t $NGINX_PID -n /bin/sh -c \
     'tc qdisc add dev eth0 clsact && tc filter add dev eth0 ingress bpf direct-action object-file ./test_tc_tunnel.o section decap'
 
 # Wait until Cilium is ready
-while ! docker exec -ti lb-node docker exec -ti cilium-lb cilium status; do sleep 1; done
+while ! docker exec -t lb-node docker exec -t cilium-lb cilium status; do sleep 1; done
 
 ##########
 #  TEST  #
@@ -108,7 +108,7 @@ LB_VIP="10.0.0.2"
 nsenter -t $(docker inspect nginx -f '{{ .State.Pid }}') -n /bin/sh -c \
     "ip a a dev eth0 ${LB_VIP}/32"
 
-docker exec -ti lb-node docker exec -ti cilium-lb \
+docker exec -t lb-node docker exec -t cilium-lb \
     cilium service update --id 1 --frontend "${LB_VIP}:80" --backends "${WORKER_IP}:80" --k8s-node-port
 
 LB_NODE_IP=$(docker exec lb-node ip -o -4 a s eth0 | awk '{print $4}' | cut -d/ -f1)
@@ -134,7 +134,7 @@ for i in $(seq 1 10); do
 done
 
 # Set kind-worker to maintenance
-docker exec -ti lb-node docker exec -ti cilium-lb \
+docker exec -t lb-node docker exec -t cilium-lb \
     cilium service update --id 1 --frontend "${LB_VIP}:80" --backends "${WORKER_IP}:80" --backend-weights "0" --k8s-node-port
 
 # Do not stop on error
