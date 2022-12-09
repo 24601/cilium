@@ -20,7 +20,7 @@ on:
   #   will disappear from the PR checks: please provide a direct link to the
   #   successful workflow run (can be found from Actions tab) in a comment.
   #
-  # pull_request: {}
+  pull_request: {}
   ###
 
 # By specifying the access of one of the scopes, all of those that are not
@@ -191,7 +191,7 @@ jobs:
 
       - name: Run LoadBalancing test
         run: |
-          cd ${{ github.workspace }}/test/l4lb && sudo ./test.sh ${{ github.repository_owner}} ${{ steps.vars.outputs.sha }} ${{ github.workspace }}/pull-request/install/kubernetes/cilium
+          cd ${{ github.workspace }}/pull-request/test/l4lb && sudo ./test.sh ${{ github.repository_owner}} ${{ steps.vars.outputs.sha }}
 
       - name: Run NAT46x64 test
         run: |
